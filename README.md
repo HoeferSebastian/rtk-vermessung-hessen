@@ -375,4 +375,4 @@ dotnet build Ntrip.sln
 - **Korrekturdaten:** SAPOS® Hessen – Zugang mit eigenen Zugangsdaten, es gelten die Bedingungen der HVBG.
 - **Drittkomponenten:** siehe [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 - **Haftung:** Das Programm wird ohne jede Gewähr bereitgestellt. Du bist selbst dafür verantwortlich, Messergebnisse zu prüfen, bevor du sie verwendest.
-- **Lizenz:** _noch festzulegen – hier die gewählte Lizenz eintragen und eine `LICENSE`-Datei ergänzen._
+- **Lizenz:** [MIT](LICENSE) – du darfst den Code frei nutzen, ändern und weitergeben, auch kommerziell. Bitte den Copyright-Hinweis beibehalten. Für Drittkomponenten und Datenquellen gelten ihre eigenen Bedingungen (siehe oben).
