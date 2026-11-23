@@ -58,8 +58,8 @@ Ein Windows-Programm, mit dem du mit einem **RTK-GNSS-Modul** und den **SAPOS-Ko
 ## Schnellstart
 
 ```powershell
-git clone https://github.com/<dein-benutzername>/<repo-name>.git
-cd <repo-name>
+git clone https://github.com/HoeferSebastian/rtk-vermessung-hessen.git
+cd rtk-vermessung-hessen
 dotnet run --project src/Ntrip.Wpf
 ```
 
