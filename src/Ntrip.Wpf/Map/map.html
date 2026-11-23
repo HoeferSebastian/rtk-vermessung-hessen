@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="origin">
+<title>Karte</title>
+<link rel="stylesheet" href="leaflet/leaflet.css">
+<style>
+  html, body, #map { height: 100%; margin: 0; background: #dfe5e8; font-family: "Segoe UI", sans-serif; }
+  .me { width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; border: 3px solid #fff;
+        box-shadow: 0 0 0 2px rgba(0,0,0,.35), 0 0 8px rgba(0,0,0,.5); background: #777; }
+  .me.q4 { background: #1e9e45; } .me.q5 { background: #f08c00; } .me.q1, .me.q2 { background: #d6336c; } .me.q0 { background: #868e96; }
+  .me .dir { position: absolute; left: 50%; top: -14px; width: 0; height: 0; margin-left: -5px;
+             border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 12px solid #1c7ed6; display: none; }
+  .pt { position: relative; }
+  .pt .dot { position: absolute; left: -7px; top: -7px; width: 14px; height: 14px; background: #e03131; border: 2px solid #fff;
+             transform: rotate(45deg); box-shadow: 0 0 4px rgba(0,0,0,.6); }
+  .pt.sel .dot { background: #fcc419; border-color: #212529; width: 18px; height: 18px; left: -9px; top: -9px; }
+  .pt.target .dot { background: #1c7ed6; }
+  .pt .lbl { position: absolute; left: 12px; top: -10px; white-space: nowrap; font-size: 12px; font-weight: 600; color: #212529;
+             text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff; }
+  .vtx { width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: #7048e8; border: 2px solid #fff;
+         box-shadow: 0 0 3px rgba(0,0,0,.6); color: #fff; font-size: 8px; text-align: center; line-height: 8px; }
+  .ref { width: 16px; height: 16px; margin: -8px 0 0 -8px; background: #5f3dc4; border: 2px solid #fff; border-radius: 3px; box-shadow: 0 0 4px rgba(0,0,0,.6); }
+  .replay { width: 16px; height: 16px; margin: -8px 0 0 -8px; background: #fd7e14; border: 3px solid #fff; border-radius: 50%; box-shadow: 0 0 4px rgba(0,0,0,.6); }
+  .mlabel { background: rgba(255,255,255,.9); border: 1px solid #7048e8; border-radius: 4px; padding: 1px 6px; font-size: 12px; font-weight: 600; color: #3b2a8a; box-shadow: none; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script src="leaflet/leaflet.js"></script>
+<script>
+(function () {
+  const send = (o) => { try { window.chrome.webview.postMessage(JSON.stringify(o)); } catch (e) { } };
+
+  const map = L.map('map', { zoomControl: true, maxZoom: 22, doubleClickZoom: false, zoomSnap: 0.5 }).setView([50.55, 9.0], 8);
+  L.control.scale({ metric: true, imperial: false }).addTo(map);
+
+  // Platzhalter für Kacheln, die nicht im Offline-Speicher liegen.
+  const missingTile = 'data:image/svg+xml,' + encodeURIComponent(
+    "<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256'><rect width='256' height='256' fill='#eceff1'/>" +
+    "<path d='M-64 256L192 0M0 256L256 0M64 256L320 0M128 256L384 0' stroke='#d5dadd' stroke-width='2'/>" +
+    "<text x='128' y='134' font-size='13' text-anchor='middle' fill='#8a949b' font-family='sans-serif'>keine Offline-Daten</text></svg>");
+
+  // Hessen-Layer (HVBG, Open Data): Die Kacheln liefert die Anwendung aus dem lokalen Speicher (tiles.local wird in C# beantwortet).
+  const hvbg = 'Geobasisdaten © HVBG Hessen (Open Data)';
+  const local = (key, ext, extra) => L.tileLayer('https://tiles.local/' + key + '/{z}/{x}/{y}.' + ext,
+    Object.assign({ maxZoom: 22, maxNativeZoom: 20, errorTileUrl: missingTile, attribution: hvbg, updateWhenIdle: true, keepBuffer: 4 }, extra || {}));
+
+  const layerSets = {
+    alk: [local('alk', 'png')],
+    dop: [local('dop', 'jpg')],
+    dopalk: [local('dop', 'jpg'), local('alk_t', 'png', { zIndex: 5, attribution: '' })],
+    osm: [L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22, maxNativeZoom: 19, attribution: '&copy; OpenStreetMap-Mitwirkende' })],
+    sat: [L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 22, maxNativeZoom: 19, attribution: 'Esri World Imagery' })],
+    topo: [L.tileLayer('https://tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 22, maxNativeZoom: 17, attribution: '&copy; OpenTopoMap, OSM' })]
+  };
+  let currentSet = [];
+
+  let follow = true, draggable = false, tool = 'pan', firstFix = true;
+  let me = null, nav = null, ref = null, replay = null, draft = null;
+  const ptLayer = L.layerGroup().addTo(map);
+  const trackLayer = L.layerGroup().addTo(map);
+  const measLayer = L.layerGroup().addTo(map);
+  const draftLayer = L.layerGroup().addTo(map);
+  let live = L.polyline([], { color: '#e8590c', weight: 4, opacity: .9, interactive: false }).addTo(map);
+
+  const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  map.on('click', e => send({ t: 'click', lat: e.latlng.lat, lon: e.latlng.lng }));
+  map.on('dragstart', () => send({ t: 'userPan' }));
+
+  window.app = {
+    setLayer(name) {
+      const next = layerSets[name] || layerSets.alk;
+      if (next === currentSet) return;
+      currentSet.forEach(l => map.removeLayer(l));
+      currentSet = next;
+      currentSet.forEach(l => l.addTo(map));
+    },
+    // Nach einem Download: Kacheln neu anfordern.
+    redrawTiles() { currentSet.forEach(l => l.redraw && l.redraw()); },
+    bounds() {
+      const b = map.getBounds();
+      return { s: b.getSouth(), w: b.getWest(), n: b.getNorth(), e: b.getEast(), z: map.getZoom() };
+    },
+    setTool(t) { tool = t; map.getContainer().style.cursor = t === 'pan' ? '' : 'crosshair'; },
+    setFollow(b) { follow = b; if (b && me) map.panTo(me.getLatLng()); },
+    setDraggable(b) { draggable = b; },
+
+    update(m) {
+      if (!m) { if (me) { map.removeLayer(me); me = null; } return; }
+      const icon = L.divIcon({ className: '', iconSize: [0, 0], html: `<div class="me q${m.q}"><div class="dir" style="display:${m.heading == null ? 'none' : 'block'};transform:rotate(${m.heading || 0}deg);transform-origin:5px 25px"></div></div>` });
+      if (!me) { me = L.marker([m.lat, m.lon], { icon, interactive: false, zIndexOffset: 1000 }).addTo(map); }
+      else { me.setLatLng([m.lat, m.lon]); me.setIcon(icon); }
+      if (firstFix) { firstFix = false; map.setView([m.lat, m.lon], 19); }
+      else if (follow) map.panTo([m.lat, m.lon], { animate: false });
+    },
+
+    setPoints(arr) {
+      ptLayer.clearLayers();
+      arr.forEach(p => {
+        const icon = L.divIcon({ className: '', iconSize: [0, 0],
+          html: `<div class="pt${p.sel ? ' sel' : ''}${p.target ? ' target' : ''}"><div class="dot"></div><div class="lbl">${esc(p.name)}</div></div>` });
+        const mk = L.marker([p.lat, p.lon], { icon, draggable: draggable, zIndexOffset: p.sel ? 500 : 0 }).addTo(ptLayer);
+        mk.on('click', () => send({ t: 'pointClick', id: p.id }));
+        mk.on('dragend', () => { const ll = mk.getLatLng(); send({ t: 'pointMoved', id: p.id, lat: ll.lat, lon: ll.lng }); });
+      });
+    },
+
+    setTracks(arr) {
+      trackLayer.clearLayers();
+      arr.forEach(t => {
+        if (t.coords.length < 2) return;
+        L.polyline(t.coords, { color: t.color, weight: t.sel ? 6 : 3, opacity: t.sel ? 1 : .75, interactive: false }).addTo(trackLayer);
+      });
+    },
+    setLive(coords) { live.setLatLngs(coords); },
+    appendLive(ll) { live.addLatLng(ll); },
+
+    setNav(n) {
+      if (nav) { map.removeLayer(nav); nav = null; }
+      if (!n) return;
+      nav = L.polyline([[n.from[0], n.from[1]], [n.to[0], n.to[1]]], { color: '#1c7ed6', weight: 3, dashArray: '8 6', interactive: false }).addTo(map);
+    },
+    setRef(r) {
+      if (ref) { map.removeLayer(ref); ref = null; }
+      if (!r) return;
+      ref = L.marker([r.lat, r.lon], { icon: L.divIcon({ className: '', iconSize: [0, 0], html: '<div class="ref"></div>' }), interactive: false })
+        .bindTooltip(r.label, { direction: 'right' }).addTo(map);
+    },
+    setReplay(ll) {
+      if (replay) { map.removeLayer(replay); replay = null; }
+      if (!ll) return;
+      replay = L.marker(ll, { icon: L.divIcon({ className: '', iconSize: [0, 0], html: '<div class="replay"></div>' }), interactive: false, zIndexOffset: 900 }).addTo(map);
+      if (!map.getBounds().contains(ll)) map.panTo(ll);
+    },
+
+    setDraft(d) {
+      draftLayer.clearLayers();
+      if (!d || !d.pts.length) return;
+      const style = { color: '#7048e8', weight: 3, dashArray: '6 4', fillOpacity: .15, interactive: false };
+      if (d.kind === 'Flaeche' && d.pts.length >= 3) L.polygon(d.pts, style).addTo(draftLayer);
+      else if (d.pts.length >= 2) L.polyline(d.pts, style).addTo(draftLayer);
+      d.pts.forEach((p, i) => L.marker(p, { icon: L.divIcon({ className: '', iconSize: [0, 0], html: `<div class="vtx">${i + 1}</div>` }), interactive: false }).addTo(draftLayer));
+    },
+    setMeasures(arr) {
+      measLayer.clearLayers();
+      arr.forEach(m => {
+        const style = { color: m.sel ? '#d9480f' : '#7048e8', weight: m.sel ? 4 : 2, fillOpacity: .12, interactive: false };
+        let layer;
+        if (m.kind === 'Flaeche' && m.pts.length >= 3) layer = L.polygon(m.pts, style);
+        else if (m.pts.length >= 2) layer = L.polyline(m.pts, style);
+        else return;
+        layer.addTo(measLayer);
+        const c = layer.getBounds().getCenter();
+        L.marker(c, { icon: L.divIcon({ className: '', iconSize: [0, 0] }), interactive: false }).bindTooltip(esc(m.label), { permanent: true, direction: 'center', className: 'mlabel' }).addTo(measLayer);
+      });
+    },
+
+    fit(pts) {
+      if (!pts || !pts.length) return;
+      if (pts.length === 1) { map.setView(pts[0], 20); return; }
+      map.fitBounds(L.latLngBounds(pts).pad(0.2), { maxZoom: 21 });
+    },
+    zoomTo(ll, z) { map.setView(ll, z || 20); }
+  };
+
+  send({ t: 'ready' });
+})();
+</script>
+</body>
+</html>

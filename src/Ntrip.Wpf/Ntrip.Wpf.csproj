@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>Ntrip.Wpf</RootNamespace>
+    <NoWarn>$(NoWarn);CS4014</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.IO.Ports" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2792.45" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ntrip.Core\Ntrip.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Map\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- appsettings.json (lokale Konfiguration, nicht im Repo) beim ersten Build aus der Vorlage erzeugen und neben die EXE kopieren. -->
+  <Target Name="EnsureAppSettings" BeforeTargets="BeforeBuild">
+    <Copy SourceFiles="appsettings.example.json" DestinationFiles="appsettings.json" Condition="!Exists('appsettings.json')" />
+  </Target>
+  <Target Name="CopyAppSettings" AfterTargets="Build">
+    <Copy SourceFiles="appsettings.json" DestinationFolder="$(OutDir)" />
+  </Target>
+
+</Project>

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Ntrip.ConsoleApp</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ntrip.Core\Ntrip.Core.csproj" />
+  </ItemGroup>
+
+  <!-- appsettings.json (lokale Konfiguration, nicht im Repo) beim ersten Build aus der Vorlage erzeugen und neben die EXE kopieren. -->
+  <Target Name="EnsureAppSettings" BeforeTargets="BeforeBuild">
+    <Copy SourceFiles="appsettings.example.json" DestinationFiles="appsettings.json" Condition="!Exists('appsettings.json')" />
+  </Target>
+  <Target Name="CopyAppSettings" AfterTargets="Build">
+    <Copy SourceFiles="appsettings.json" DestinationFolder="$(OutDir)" />
+  </Target>
+
+</Project>

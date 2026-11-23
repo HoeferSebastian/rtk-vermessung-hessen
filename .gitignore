@@ -1,0 +1,18 @@
+# Build-Ausgaben
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+# Lokale Konfiguration mit Zugangsdaten – NIEMALS einchecken!
+# (Vorlage: appsettings.example.json)
+appsettings.json
+!appsettings.example.json
+
+# Lokale Daten
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.rtcm
+*.rtkproj.json
